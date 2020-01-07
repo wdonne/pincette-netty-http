@@ -28,6 +28,7 @@ import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerCodec;
@@ -98,10 +99,9 @@ public class HttpServer implements Closeable {
               @Override
               public void initChannel(final SocketChannel ch) {
                 ch.pipeline()
-                    .addLast("codec", new HttpServerCodec())
-                    .addLast("request", new HttpHandler(requestHandler))
-                    .addLast(new HttpResponseEncoder())
-                    .addLast(new HttpContentCompressor());
+                    .addLast(new HttpServerCodec())
+                    .addLast(new HttpContentCompressor())
+                    .addLast(new HttpHandler(requestHandler));
               }
             })
         .option(SO_BACKLOG, 128)
@@ -148,7 +148,7 @@ public class HttpServer implements Closeable {
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext context, Object message) {
+    public void channelRead(final ChannelHandlerContext context, final Object message) {
       if (message instanceof HttpRequest) {
         handleRequest(context, (HttpRequest) message);
       } else if (message instanceof LastHttpContent) {
@@ -166,12 +166,12 @@ public class HttpServer implements Closeable {
     }
 
     @Override
-    public void channelReadComplete(ChannelHandlerContext ctx) {
+    public void channelReadComplete(final ChannelHandlerContext ctx) {
       ctx.flush();
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
+    public void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) {
       internalServerError(context, cause);
     }
 

@@ -21,6 +21,13 @@ class ByteBufInputStream extends InputStream {
 
   ByteBufInputStream(final List<ByteBuf> buffers) {
     this.buffers = buffers;
+    checkCurrentBuffer();
+  }
+
+  private void checkCurrentBuffer() {
+    if (!buffers.isEmpty() && !buffers.get(0).isReadable()) {
+      buffers.remove(0).release();
+    }
   }
 
   @Override
@@ -32,29 +39,21 @@ class ByteBufInputStream extends InputStream {
 
   @Override
   public int read(final byte[] b, final int off, final int len) {
-    return readBuffer(b, off, len)
-        .orElseGet(
-            () ->
-                buffers.size() <= 1
-                    ? SideEffect.<Integer>run(
-                            () ->
-                                Optional.of(buffers)
-                                    .filter(buf -> buf.size() == 1)
-                                    .ifPresent(buf -> buf.get(0).release()))
-                        .andThenGet(() -> -1)
-                    : SideEffect.<Integer>run(() -> buffers.remove(0).release())
-                        .andThenGet(() -> read(b, off, len)));
+    return readBuffer(b, off, len).orElse(-1);
   }
 
   private Optional<Integer> readBuffer(final byte[] b, final int off, final int len) {
     return Optional.of(buffers)
         .filter(buf -> !buf.isEmpty())
         .map(buf -> buf.get(0))
-        .filter(ByteBuf::isReadable)
         .map(buf -> pair(buf, min(len, buf.readableBytes())))
         .map(
             pair ->
-                SideEffect.<Integer>run(() -> pair.first.readBytes(b, off, pair.second))
+                SideEffect.<Integer>run(
+                        () -> {
+                          pair.first.readBytes(b, off, pair.second);
+                          checkCurrentBuffer();
+                        })
                     .andThenGet(() -> pair.second));
   }
 }
