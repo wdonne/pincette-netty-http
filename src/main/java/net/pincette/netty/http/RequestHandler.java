@@ -14,7 +14,6 @@ import org.reactivestreams.Publisher;
  */
 @FunctionalInterface
 public interface RequestHandler {
-
   /**
    * An implementation should return a publisher for the response body. It should not block.
    *

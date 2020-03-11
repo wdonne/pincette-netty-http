@@ -1,6 +1,6 @@
 package net.pincette.netty.http;
 
-import static io.netty.buffer.Unpooled.copiedBuffer;
+import static io.netty.buffer.Unpooled.wrappedBuffer;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
@@ -9,7 +9,8 @@ import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERR
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpUtil.isKeepAlive;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static net.pincette.util.Util.rethrow;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static net.pincette.util.Util.getStackTrace;
 import static net.pincette.util.Util.tryToDoRethrow;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -28,16 +29,12 @@ import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.Closeable;
-import net.pincette.function.SideEffect;
 import net.pincette.rs.NopSubscription;
-import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
@@ -76,7 +73,7 @@ public class HttpServer implements Closeable {
     this(port, accumulate(requestHandler));
   }
 
-  private static RequestHandler accumulate(final RequestHandlerAccumulated requestHandler) {
+  public static RequestHandler accumulate(final RequestHandlerAccumulated requestHandler) {
     return (request, requestBody, response) -> {
       final Accumulator accumulator = new Accumulator(request, response, requestHandler);
 
@@ -144,7 +141,7 @@ public class HttpServer implements Closeable {
         final ChannelHandlerContext context, final Throwable cause) {
       context.writeAndFlush(
           new DefaultFullHttpResponse(
-              HTTP_1_1, INTERNAL_SERVER_ERROR, copiedBuffer(cause.getMessage().getBytes())));
+              HTTP_1_1, INTERNAL_SERVER_ERROR, wrappedBuffer(getStackTrace(cause).getBytes())));
     }
 
     @Override
@@ -193,38 +190,58 @@ public class HttpServer implements Closeable {
                 s.onSubscribe(new NopSubscription());
               },
               response)
-          .thenAccept(
-              body ->
-                  SideEffect.<Publisher<ByteBuf>>run(() -> context.writeAndFlush(response))
-                      .andThenGet(() -> body)
-                      .subscribe(new ResponseStreamer(context, keepAlive)));
+          .thenAccept(body -> body.subscribe(new ResponseStreamer(response, context, keepAlive)));
     }
   }
 
   private static class ResponseStreamer implements Subscriber<ByteBuf> {
     private final ChannelHandlerContext context;
     private final boolean keepAlive;
+    private final HttpResponse response;
+    private boolean error;
+    private boolean responseFlushed;
     private Subscription subscription;
 
-    private ResponseStreamer(final ChannelHandlerContext context, final boolean keepAlive) {
+    private ResponseStreamer(
+        final HttpResponse response, final ChannelHandlerContext context, final boolean keepAlive) {
+      this.response = response;
       this.context = context;
       this.keepAlive = keepAlive;
     }
 
+    private void flushResponse() {
+      if (!responseFlushed) {
+        context.writeAndFlush(response);
+        responseFlushed = true;
+      }
+    }
+
     public void onComplete() {
-      context
-          .writeAndFlush(new DefaultLastHttpContent())
-          .addListener(
-              keepAlive ? (f -> context.channel().flush()) : (f -> context.channel().close()));
+      if (!error) {
+        flushResponse();
+        context
+            .writeAndFlush(new DefaultLastHttpContent())
+            .addListener(
+                keepAlive ? (f -> context.channel().flush()) : (f -> context.channel().close()));
+      }
     }
 
     public void onError(final Throwable t) {
-      rethrow(t);
+      response.setStatus(INTERNAL_SERVER_ERROR);
+      response.headers().set("Content-Type", "text/plain");
+      flushResponse();
+      context.writeAndFlush(
+          new DefaultHttpContent(wrappedBuffer(getStackTrace(t).getBytes(UTF_8))));
+      onComplete();
+      error = true;
     }
 
     public void onNext(final ByteBuf buffer) {
-      context.writeAndFlush(new DefaultHttpContent(buffer));
-      subscription.request(1);
+      if (!error) {
+        flushResponse();
+        context.writeAndFlush(new DefaultHttpContent(buffer));
+        subscription.request(1);
+      }
     }
 
     public void onSubscribe(final Subscription subscription) {
