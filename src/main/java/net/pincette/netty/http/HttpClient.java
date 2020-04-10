@@ -1,6 +1,7 @@
 package net.pincette.netty.http;
 
-import static java.util.Objects.requireNonNull;
+import static java.lang.Integer.parseInt;
+import static net.pincette.util.Pair.pair;
 import static net.pincette.util.Util.rethrow;
 import static net.pincette.util.Util.tryToGetRethrow;
 
@@ -16,7 +17,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import net.pincette.rs.LambdaSubscriber;
 import net.pincette.rs.NopSubscription;
+import net.pincette.util.Pair;
 import org.reactivestreams.Subscriber;
 
 /**
@@ -36,6 +37,9 @@ import org.reactivestreams.Subscriber;
  * @since 1.1
  */
 public class HttpClient {
+  private static final String HOST = "Host";
+  private static final String HTTPS = "https";
+
   final NioEventLoopGroup group = new NioEventLoopGroup();
 
   private static ChannelInitializer<SocketChannel> createPipeline(
@@ -55,20 +59,44 @@ public class HttpClient {
 
   private static int defaultPort(final URI uri) {
     return Optional.ofNullable(uri.getScheme())
-        .map(scheme -> "https".equals(scheme) ? 443 : 80)
+        .map(scheme -> HTTPS.equals(scheme) ? 443 : 80)
         .orElse(80);
   }
 
   private static String getHost(final HttpRequest request) {
-    return requireNonNull(tryToGetRethrow(() -> new URI((request.uri())).getHost()).orElse(null));
+    return Optional.ofNullable(request.headers().get(HOST))
+        .map(HttpClient::splitHost)
+        .map(pair -> pair.first)
+        .orElse(null);
   }
 
   private static int getPort(final HttpRequest request) {
-    return tryToGetRethrow(() -> new URI(request.uri()))
-        .map(uri -> uri.getPort() == -1 ? defaultPort(uri) : uri.getPort())
+    return Optional.ofNullable(request.headers().get(HOST))
+        .map(HttpClient::splitHost)
+        .map(pair -> pair.second)
         .orElse(-1);
   }
 
+  private static void setHost(final FullHttpRequest request) {
+    tryToGetRethrow(() -> new URI(request.uri()))
+        .filter(uri -> uri.getHost() != null)
+        .ifPresent(
+            uri ->
+                request
+                    .setUri(uri.getPath())
+                    .headers()
+                    .add(
+                        HOST,
+                        uri.getHost()
+                            + ":"
+                            + (uri.getPort() != -1 ? uri.getPort() : defaultPort(uri))));
+  }
+
+  private static Pair<String, Integer> splitHost(final String host) {
+    return Optional.of(host.split(":"))
+        .map(parts -> pair(parts[0], parseInt(parts[1])))
+        .orElse(null);
+  }
   /**
    * The function completes when the response has arrived, before the response body is emitted.
    *
@@ -80,6 +108,8 @@ public class HttpClient {
    */
   public CompletionStage<HttpResponse> request(
       final FullHttpRequest request, final Subscriber<ByteBuf> responseBody) {
+    setHost(request);
+
     final CompletableFuture<HttpResponse> future = new CompletableFuture<>();
     final ChannelFuture cf =
         new Bootstrap()
