@@ -1,5 +1,6 @@
 package net.pincette.netty.http;
 
+import static io.netty.handler.ssl.SslContextBuilder.forClient;
 import static java.lang.Integer.parseInt;
 import static net.pincette.util.Pair.pair;
 import static net.pincette.util.Util.rethrow;
@@ -11,6 +12,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -38,16 +40,31 @@ import org.reactivestreams.Subscriber;
  */
 public class HttpClient {
   private static final String HOST = "Host";
+  private static final String HTTP = "http";
   private static final String HTTPS = "https";
 
   final NioEventLoopGroup group = new NioEventLoopGroup();
 
   private static ChannelInitializer<SocketChannel> createPipeline(
-      final CompletableFuture<HttpResponse> future, final Subscriber<ByteBuf> responseBody) {
+      final String scheme,
+      final String host,
+      final int port,
+      final CompletableFuture<HttpResponse> future,
+      final Subscriber<ByteBuf> responseBody) {
     return new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(final SocketChannel ch) {
-        ch.pipeline()
+        final ChannelPipeline pipeline = ch.pipeline();
+
+        if (HTTPS.equals(scheme)) {
+          pipeline.addLast(
+              "ssl",
+              tryToGetRethrow(() -> forClient().build())
+                  .map(context -> context.newHandler(ch.alloc(), host, port))
+                  .orElse(null));
+        }
+
+        pipeline
             .addLast(new HttpClientCodec())
             .addLast(new ChunkedWriteHandler())
             .addLast(
@@ -74,7 +91,15 @@ public class HttpClient {
     return Optional.ofNullable(request.headers().get(HOST))
         .map(HttpClient::splitHost)
         .map(pair -> pair.second)
-        .orElse(-1);
+        .orElseGet(
+            () ->
+                tryToGetRethrow(() -> new URI(request.uri()))
+                    .map(uri -> uri.getPort() != -1 ? uri.getPort() : defaultPort(uri))
+                    .orElse(-1));
+  }
+
+  private static String getScheme(final HttpRequest request) {
+    return tryToGetRethrow(() -> new URI(request.uri())).map(URI::getScheme).orElse(HTTP);
   }
 
   private static void setHost(final FullHttpRequest request) {
@@ -85,16 +110,12 @@ public class HttpClient {
                 request
                     .setUri(uri.getPath())
                     .headers()
-                    .add(
-                        HOST,
-                        uri.getHost()
-                            + ":"
-                            + (uri.getPort() != -1 ? uri.getPort() : defaultPort(uri))));
+                    .add(HOST, uri.getHost() + (uri.getPort() != -1 ? (":" + uri.getPort()) : "")));
   }
 
   private static Pair<String, Integer> splitHost(final String host) {
     return Optional.of(host.split(":"))
-        .map(parts -> pair(parts[0], parseInt(parts[1])))
+        .map(parts -> pair(parts[0], parts.length > 1 ? parseInt(parts[1]) : null))
         .orElse(null);
   }
   /**
@@ -108,15 +129,19 @@ public class HttpClient {
    */
   public CompletionStage<HttpResponse> request(
       final FullHttpRequest request, final Subscriber<ByteBuf> responseBody) {
+    final int port = getPort(request);
+    final String scheme = getScheme(request);
+
     setHost(request);
 
+    final String host = getHost(request);
     final CompletableFuture<HttpResponse> future = new CompletableFuture<>();
     final ChannelFuture cf =
         new Bootstrap()
             .group(group)
             .channel(NioSocketChannel.class)
-            .handler(createPipeline(future, responseBody))
-            .connect(getHost(request), getPort(request));
+            .handler(createPipeline(scheme, host, port, future, responseBody))
+            .connect(host, port);
 
     cf.addListener(
         f -> {
