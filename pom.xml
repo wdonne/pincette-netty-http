@@ -6,7 +6,7 @@
 
   <groupId>net.pincette</groupId>
   <artifactId>pincette-netty-http</artifactId>
-  <version>1.2</version>
+  <version>1.2.1</version>
   <packaging>jar</packaging>
   <name>pincette-netty-http</name>
   <description>A simple Netty HTTP server and client</description>
@@ -46,13 +46,16 @@
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.source>1.8</maven.compiler.source>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <sonar.projectKey>wdonne_pincette-netty-http</sonar.projectKey>
+    <sonar.organization>wdonne-github</sonar.organization>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>1.8</version>
+      <version>1.8.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -116,12 +119,13 @@
         <version>3.1.1</version>
         <configuration>
           <additionalJOptions>
-            <additionalJOption>-J-Dhttp.agent=maven-javadoc-plugin-${project.name}</additionalJOption>
+            <additionalJOption>-J-Dhttp.agent=maven-javadoc-plugin-${project.name}
+            </additionalJOption>
           </additionalJOptions>
           <links>
             <link>http://docs.oracle.com/javase/8/docs/api/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-common/1.8/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/1.6.1/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/1.7/</link>
             <link>https://www.javadoc.io/doc/org.reactivestreams/reactive-streams/1.0.3/</link>
             <link>https://www.javadoc.io/doc/io.netty/netty-handler/4.1.65.Final/</link>
             <link>https://www.javadoc.io/doc/io.netty/netty-codec-http/4.1.65.Final/</link>
