@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import java.util.concurrent.CompletionStage;
-import org.reactivestreams.Publisher;
+import java.util.concurrent.Flow.Publisher;
 
 /**
  * The interface for handling requests.
@@ -20,7 +20,8 @@ public interface RequestHandler {
    * @param request the request received from the server.
    * @param requestBody the publisher through which request body chunks are emitted.
    * @param response the response the server will send back.
-   * @return The publisher through which the response body chunks are emitted.
+   * @return The publisher through which the response body chunks are emitted. If the publisher is
+   *     <code>null</code> then nothing is emitted.
    * @since 1.0
    */
   CompletionStage<Publisher<ByteBuf>> apply(

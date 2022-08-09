@@ -1,14 +1,16 @@
 package net.pincette.netty.http;
 
 import static io.netty.buffer.Unpooled.wrappedBuffer;
+import static io.netty.channel.ChannelOption.AUTO_READ;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaderValues.KEEP_ALIVE;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpUtil.isKeepAlive;
+import static io.netty.handler.codec.http.HttpUtil.setKeepAlive;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static io.netty.handler.codec.http.LastHttpContent.EMPTY_LAST_CONTENT;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static net.pincette.util.Util.getStackTrace;
 import static net.pincette.util.Util.tryToDoRethrow;
@@ -16,6 +18,7 @@ import static net.pincette.util.Util.tryToDoRethrow;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
@@ -28,15 +31,18 @@ import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpContentCompressor;
+import io.netty.handler.codec.http.HttpContentDecompressor;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.Closeable;
-import net.pincette.rs.NopSubscription;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
 
 /**
  * A simple HTTP server on top of Netty.
@@ -53,8 +59,7 @@ public class HttpServer implements Closeable {
    * Sets up an HTTP server.
    *
    * @param port the port to bind to.
-   * @param requestHandler the function to which requests are passed. The request body publisher
-   *     doesn't support back pressure.
+   * @param requestHandler the function to which requests are passed.
    * @since 1.0
    */
   public HttpServer(final int port, final RequestHandler requestHandler) {
@@ -65,8 +70,7 @@ public class HttpServer implements Closeable {
    * Sets up an HTTP server.
    *
    * @param port the port to bind to.
-   * @param requestHandler the function to which requests are passed. The request body publisher
-   *     doesn't support back pressure.
+   * @param requestHandler the function to which requests are passed.
    * @since 1.0
    */
   public HttpServer(final int port, final RequestHandlerAccumulated requestHandler) {
@@ -75,11 +79,26 @@ public class HttpServer implements Closeable {
 
   public static RequestHandler accumulate(final RequestHandlerAccumulated requestHandler) {
     return (request, requestBody, response) -> {
-      final Accumulator accumulator = new Accumulator(request, response, requestHandler);
+      final RequestAccumulator accumulator =
+          new RequestAccumulator(request, response, requestHandler);
 
       requestBody.subscribe(accumulator);
 
       return accumulator.get();
+    };
+  }
+
+  private static ChannelHandler childInitializer(final RequestHandler requestHandler) {
+    return new ChannelInitializer<SocketChannel>() {
+      @Override
+      public void initChannel(final SocketChannel ch) {
+        ch.pipeline()
+            .addLast(new HttpServerCodec())
+            .addLast(new HttpServerExpectContinueHandler())
+            .addLast(new HttpContentCompressor())
+            .addLast(new HttpContentDecompressor())
+            .addLast(new HttpHandler(requestHandler));
+      }
     };
   }
 
@@ -91,18 +110,10 @@ public class HttpServer implements Closeable {
     return new ServerBootstrap()
         .group(masterGroup, slaveGroup)
         .channel(NioServerSocketChannel.class)
-        .childHandler(
-            new ChannelInitializer<SocketChannel>() {
-              @Override
-              public void initChannel(final SocketChannel ch) {
-                ch.pipeline()
-                    .addLast(new HttpServerCodec())
-                    .addLast(new HttpContentCompressor())
-                    .addLast(new HttpHandler(requestHandler));
-              }
-            })
-        .option(SO_BACKLOG, 128)
+        .childOption(AUTO_READ, false)
         .childOption(SO_KEEPALIVE, true)
+        .childHandler(childInitializer(requestHandler))
+        .option(SO_BACKLOG, 128)
         .bind(port);
   }
 
@@ -121,6 +132,21 @@ public class HttpServer implements Closeable {
   }
 
   /**
+   * Starts the server and returns a future that completes when the server completes. The result
+   * value indicates success.
+   *
+   * @return The completion stage.
+   * @since 3.0
+   */
+  public CompletionStage<Boolean> run() {
+    final CompletableFuture<Boolean> future = new CompletableFuture<>();
+
+    channel.channel().closeFuture().addListener(f -> future.complete(f.isSuccess()));
+
+    return future;
+  }
+
+  /**
    * Starts the server, which will block.
    *
    * @since 1.0
@@ -131,7 +157,7 @@ public class HttpServer implements Closeable {
 
   private static class HttpHandler extends ChunkedWriteHandler {
     private final RequestHandler requestHandler;
-    private Subscriber<? super ByteBuf> subscriber;
+    private ChannelConsumer channelConsumer;
 
     private HttpHandler(final RequestHandler requestHandler) {
       this.requestHandler = requestHandler;
@@ -145,26 +171,31 @@ public class HttpServer implements Closeable {
     }
 
     @Override
+    public void channelActive(final ChannelHandlerContext context) {
+      channelConsumer = new ChannelConsumer();
+      channelConsumer.active(context);
+    }
+
+    @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
       if (message instanceof HttpRequest) {
         handleRequest(context, (HttpRequest) message);
       } else if (message instanceof LastHttpContent) {
-        if (subscriber != null) {
-          subscriber.onNext(((LastHttpContent) message).content());
-          subscriber.onComplete();
+        if (message != EMPTY_LAST_CONTENT) {
+          channelConsumer.read(((LastHttpContent) message).content());
         }
+
+        channelConsumer.complete();
       } else if (message instanceof HttpContent) {
-        if (subscriber != null) {
-          subscriber.onNext(((HttpContent) message).content());
-        }
+        channelConsumer.read(((HttpContent) message).content());
       } else {
         tryToDoRethrow(() -> super.channelRead(context, message));
       }
     }
 
     @Override
-    public void channelReadComplete(final ChannelHandlerContext ctx) {
-      ctx.flush();
+    public void channelReadComplete(final ChannelHandlerContext context) {
+      channelConsumer.readCompleted(context);
     }
 
     @Override
@@ -177,20 +208,19 @@ public class HttpServer implements Closeable {
       final HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
 
       if (keepAlive) {
-        response.headers().set(CONNECTION, KEEP_ALIVE);
+        setKeepAlive(response, true);
       }
 
-      response.headers().set("Transfer-Encoding", "chunked");
-
       requestHandler
-          .apply(
-              request,
-              s -> {
-                this.subscriber = s;
-                s.onSubscribe(new NopSubscription());
-              },
-              response)
-          .thenAccept(body -> body.subscribe(new ResponseStreamer(response, context, keepAlive)));
+          .apply(request, channelConsumer::subscribe, response)
+          .thenAccept(
+              body -> {
+                if (body != null) {
+                  body.subscribe(new ResponseStreamer(response, context, keepAlive));
+                } else {
+                  context.writeAndFlush(response);
+                }
+              });
     }
   }
 
@@ -228,7 +258,7 @@ public class HttpServer implements Closeable {
 
     public void onError(final Throwable t) {
       response.setStatus(INTERNAL_SERVER_ERROR);
-      response.headers().set("Content-Type", "text/plain");
+      response.headers().set(CONTENT_TYPE, "text/plain");
       flushResponse();
       context.writeAndFlush(
           new DefaultHttpContent(wrappedBuffer(getStackTrace(t).getBytes(UTF_8))));

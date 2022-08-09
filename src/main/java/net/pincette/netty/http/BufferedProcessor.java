@@ -4,9 +4,9 @@ import static io.netty.buffer.Unpooled.buffer;
 import static java.lang.Math.max;
 
 import io.netty.buffer.ByteBuf;
-import org.reactivestreams.Processor;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
+import java.util.concurrent.Flow.Processor;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
 
 /**
  * Buffers bytes before writing them to the Netty buffer.
