@@ -200,7 +200,8 @@ public class HttpClient {
    *
    * @param request the request object, which must not be <code>null</code>.
    * @param responseBody the response body subscriber. If it is <code>null</code> the response body
-   *     will be consumed and discarded.
+   *     will be consumed and discarded. The buffers are released as soon as the <code>onNext</code>
+   *     method of the subscriber returns. If you still need them later, you have to make a copy.
    * @return The response object.
    * @since 1.1
    */

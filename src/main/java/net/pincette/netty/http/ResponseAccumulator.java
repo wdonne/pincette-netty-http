@@ -19,7 +19,7 @@ import net.pincette.rs.Accumulator;
  */
 public class ResponseAccumulator extends Accumulator<ByteBuf, InputStream> {
   public ResponseAccumulator() {
-    super(buffers -> completedFuture(asInputStream(buffers)));
+    super(buffers -> completedFuture(asInputStream(buffers)), ByteBuf::retain);
   }
 
   /**

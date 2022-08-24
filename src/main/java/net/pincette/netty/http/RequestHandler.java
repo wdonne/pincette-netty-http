@@ -18,7 +18,9 @@ public interface RequestHandler {
    * An implementation should return a publisher for the response body. It should not block.
    *
    * @param request the request received from the server.
-   * @param requestBody the publisher through which request body chunks are emitted.
+   * @param requestBody the publisher through which request body chunks are emitted. The buffers are
+   *     released as soon as the <code>onNext</code> method of the subscriber returns. If you still
+   *     need them later, you have to make a copy.
    * @param response the response the server will send back.
    * @return The publisher through which the response body chunks are emitted. If the publisher is
    *     <code>null</code> then nothing is emitted.

@@ -11,7 +11,7 @@ import net.pincette.rs.Accumulator;
 /**
  * Accumulates a request and when that's done it calls the request handler.
  *
- * @author Werner Donn\u00e0
+ * @author Werner Donn\u00e9
  * @since 1.0
  */
 public class RequestAccumulator extends Accumulator<ByteBuf, Publisher<ByteBuf>> {
@@ -19,6 +19,8 @@ public class RequestAccumulator extends Accumulator<ByteBuf, Publisher<ByteBuf>>
       final HttpRequest request,
       final HttpResponse response,
       final RequestHandlerAccumulated requestHandler) {
-    super(buffers -> requestHandler.apply(request, asInputStream(buffers), response));
+    super(
+        buffers -> requestHandler.apply(request, asInputStream(buffers), response),
+        ByteBuf::retain);
   }
 }

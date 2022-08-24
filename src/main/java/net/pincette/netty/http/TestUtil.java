@@ -53,7 +53,7 @@ public class TestUtil {
             .orElseGet(() -> simpleResponse(response, NOT_FOUND, null));
   }
 
-  private static ByteBuf toNettyBuffer(final ByteBuffer buffer) {
+  public static ByteBuf toNettyBuffer(final ByteBuffer buffer) {
     final byte[] buf = new byte[buffer.limit() - buffer.position()];
 
     buffer.get(buf);

@@ -6,7 +6,7 @@
 
   <groupId>net.pincette</groupId>
   <artifactId>pincette-netty-http</artifactId>
-  <version>3.0</version>
+  <version>3.0.1</version>
   <packaging>jar</packaging>
   <name>pincette-netty-http</name>
   <description>A simple Netty HTTP server and client</description>
@@ -51,26 +51,36 @@
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
   </properties>
 
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>4.1.79.Final</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>2.0.2</version>
+      <version>2.0.3</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>3.0</version>
+      <version>3.0.1</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-handler</artifactId>
-      <version>4.1.79.Final</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-codec-http</artifactId>
-      <version>4.1.79.Final</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -131,9 +141,9 @@
           <links>
             <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-common/2.0.2/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/2.1/</link>
-            <link>https://www.javadoc.io/doc/io.netty/netty-handler/4.1.77.Final/</link>
-            <link>https://www.javadoc.io/doc/io.netty/netty-codec-http/4.1.77.Final/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/3.0/</link>
+            <link>https://www.javadoc.io/doc/io.netty/netty-handler/4.1.79.Final/</link>
+            <link>https://www.javadoc.io/doc/io.netty/netty-codec-http/4.1.79.Final/</link>
           </links>
         </configuration>
       </plugin>

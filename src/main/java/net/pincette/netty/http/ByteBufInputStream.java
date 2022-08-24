@@ -21,7 +21,6 @@ class ByteBufInputStream extends InputStream {
 
   ByteBufInputStream(final List<ByteBuf> buffers) {
     this.buffers = buffers;
-    checkCurrentBuffer();
   }
 
   private void checkCurrentBuffer() {
