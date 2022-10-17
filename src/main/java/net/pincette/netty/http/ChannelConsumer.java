@@ -4,13 +4,16 @@ import static net.pincette.rs.Serializer.dispatch;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
 
 class ChannelConsumer {
   private final Deque<ByteBuf> buffers = new ConcurrentLinkedDeque<>();
+  private final List<ByteBuf> sent = new ArrayList<>();
   private boolean completed;
   private long requested;
   private Subscriber<? super ByteBuf> subscriber;
@@ -38,8 +41,8 @@ class ChannelConsumer {
 
       final ByteBuf buf = buffers.removeLast();
 
+      sent.add(buf);
       subscriber.onNext(buf);
-      buf.release();
     }
   }
 
@@ -74,6 +77,11 @@ class ChannelConsumer {
             more(context);
           }
         });
+  }
+
+  void releaseSent() {
+    sent.forEach(ByteBuf::release);
+    sent.clear();
   }
 
   void subscribe(final Subscriber<? super ByteBuf> subscriber) {
