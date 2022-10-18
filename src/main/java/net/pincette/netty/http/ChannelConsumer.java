@@ -16,6 +16,7 @@ class ChannelConsumer {
   private final List<ByteBuf> sent = new ArrayList<>();
   private boolean completed;
   private long requested;
+  private boolean sentCompleted;
   private Subscriber<? super ByteBuf> subscriber;
   private Subscription subscription;
 
@@ -50,7 +51,7 @@ class ChannelConsumer {
     if (!completed) {
       context.read();
     } else {
-      subscriber.onComplete();
+      sendCompleted();
     }
   }
 
@@ -84,6 +85,13 @@ class ChannelConsumer {
     sent.clear();
   }
 
+  private void sendCompleted() {
+    if (!sentCompleted) {
+      sentCompleted = true;
+      subscriber.onComplete();
+    }
+  }
+
   void subscribe(final Subscriber<? super ByteBuf> subscriber) {
     this.subscriber = subscriber;
     notifySubscriber();
@@ -104,6 +112,7 @@ class ChannelConsumer {
       dispatch(
           () -> {
             requested += n;
+            releaseSent();
             flush();
 
             if (requested > 0) {
