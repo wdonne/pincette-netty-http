@@ -62,6 +62,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow.Processor;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
+import net.pincette.function.SideEffect;
 
 /**
  * A simple HTTP client for Netty. It uses reactive streams with backpressure.
@@ -238,7 +239,11 @@ public class HttpClient {
         response ->
             shouldRedirect(response)
                 ? redirect(copyForRedirect, redirectable, response)
-                : completedFuture(response));
+                : completedFuture(response)
+                    .thenApply(
+                        resp ->
+                            SideEffect.<HttpResponse>run(copyForRedirect::release)
+                                .andThenGet(() -> resp)));
   }
 
   private boolean shouldRedirect(final HttpResponse response) {
