@@ -218,7 +218,7 @@ class TestHttp {
 
   private static void testGet(final String resource, final HttpResponseStatus expected) {
     requestResource(absUri(resource, 9000), expected)
-        .thenAccept(res -> assertArrayEquals(res, read("/" + resource)))
+        .thenAccept(res -> assertArrayEquals(read("/" + resource), res))
         .toCompletableFuture()
         .join();
   }
@@ -237,7 +237,7 @@ class TestHttp {
 
   private static void testRedirect(final String resource) {
     requestResource(absUri(resource, 9001), OK)
-        .thenAccept(res -> assertArrayEquals(res, read("/" + resource)))
+        .thenAccept(res -> assertArrayEquals(read("/" + resource), res))
         .toCompletableFuture()
         .join();
   }

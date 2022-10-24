@@ -30,6 +30,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static net.pincette.netty.http.Util.simpleResponse;
+import static net.pincette.rs.Serializer.dispatch;
 import static net.pincette.rs.Util.devNull;
 import static net.pincette.util.Util.rethrow;
 import static net.pincette.util.Util.tryToGetRethrow;
@@ -103,12 +104,6 @@ public class HttpClient {
         || EXPECTATION_FAILED == status;
   }
 
-  public static boolean hasBody(final HttpResponse response) {
-    return (response.headers().contains(CONTENT_LENGTH)
-            || response.headers().contains(TRANSFER_ENCODING))
-        && !bodyAbsent(response.status());
-  }
-
   private static ChannelInitializer<SocketChannel> createPipeline(
       final String scheme,
       final String host,
@@ -160,12 +155,26 @@ public class HttpClient {
         .orElseThrow(() -> new IllegalArgumentException("The URI must be absolute."));
   }
 
+  public static boolean hasBody(final HttpResponse response) {
+    return (response.headers().contains(CONTENT_LENGTH)
+            || response.headers().contains(TRANSFER_ENCODING))
+        && !bodyAbsent(response.status());
+  }
+
   private static boolean isRedirect(final HttpResponseStatus status) {
     return status == MOVED_PERMANENTLY
         || status == FOUND
         || status == SEE_OTHER
         || status == TEMPORARY_REDIRECT
         || status == PERMANENT_REDIRECT;
+  }
+
+  private static Redirectable newRedirectable(final Subscriber<? super ByteBuf> responseBody) {
+    final Redirectable redirectable = new Redirectable();
+
+    redirectable.subscribe(responseBody != null ? responseBody : devNull());
+
+    return redirectable;
   }
 
   private static SslHandler sslHandler(
@@ -208,10 +217,12 @@ public class HttpClient {
    */
   public CompletionStage<HttpResponse> request(
       final FullHttpRequest request, final Subscriber<? super ByteBuf> responseBody) {
+    final Redirectable redirectable =
+        responseBody instanceof Redirectable
+            ? (Redirectable) responseBody
+            : newRedirectable(responseBody);
     final URI uri = getUri(request);
-    final Redirectable redirectable = new Redirectable();
 
-    redirectable.subscribe(responseBody != null ? responseBody : devNull());
     request.headers().add(ACCEPT_ENCODING, "gzip deflate").set(HOST, fullHost(uri));
 
     final CompletableFuture<HttpResponse> future = new CompletableFuture<>();
@@ -235,15 +246,21 @@ public class HttpClient {
           }
         });
 
-    return future.thenComposeAsync(
-        response ->
-            shouldRedirect(response)
-                ? redirect(copyForRedirect, redirectable, response)
-                : completedFuture(response)
-                    .thenApply(
-                        resp ->
-                            SideEffect.<HttpResponse>run(copyForRedirect::release)
-                                .andThenGet(() -> resp)));
+    return future
+        .thenApply(
+            response ->
+                SideEffect.<HttpResponse>run(
+                        () -> redirectable.shouldRedirect = shouldRedirect(response))
+                    .andThenGet(() -> response))
+        .thenComposeAsync(
+            response ->
+                shouldRedirect(response)
+                    ? redirect(copyForRedirect, redirectable, response)
+                    : completedFuture(response)
+                        .thenApply(
+                            resp ->
+                                SideEffect.<HttpResponse>run(copyForRedirect::release)
+                                    .andThenGet(() -> resp)));
   }
 
   private boolean shouldRedirect(final HttpResponse response) {
@@ -321,12 +338,21 @@ public class HttpClient {
   }
 
   private static class Redirectable implements Processor<ByteBuf, ByteBuf> {
-    private long initialRequested;
+    private long requested;
+    private boolean shouldRedirect;
     private Subscriber<? super ByteBuf> subscriber;
-    private Wrap subscription;
+    private Subscription subscription;
+
+    private void more() {
+      if (requested > 0 && subscription != null) {
+        subscription.request(1);
+      }
+    }
 
     public void onComplete() {
-      subscriber.onComplete();
+      if (!shouldRedirect) {
+        subscriber.onComplete();
+      }
     }
 
     public void onError(final Throwable throwable) {
@@ -334,47 +360,39 @@ public class HttpClient {
     }
 
     public void onNext(final ByteBuf item) {
-      subscriber.onNext(item);
+      dispatch(
+          () -> {
+            --requested;
+            subscriber.onNext(item);
+            more();
+          });
     }
 
     public void onSubscribe(final Subscription subscription) {
-      if (this.subscription == null) {
-        this.subscription = new Wrap(subscription);
-
-        if (subscriber != null) {
-          subscriber.onSubscribe(this.subscription);
-        }
-      } else {
-        this.subscription.wrapped = subscription;
-        subscription.request(initialRequested);
-      }
+      this.subscription = subscription;
+      more();
     }
 
     public void subscribe(final Subscriber<? super ByteBuf> subscriber) {
       this.subscriber = subscriber;
-
-      if (this.subscription != null) {
-        subscriber.onSubscribe(this.subscription);
-      }
+      subscriber.onSubscribe(new Backpressure());
     }
 
-    private class Wrap implements Subscription {
-      private Subscription wrapped;
-
-      private Wrap(final Subscription subscription) {
-        wrapped = subscription;
-      }
-
+    private class Backpressure implements Subscription {
       public void cancel() {
-        wrapped.cancel();
+        // Nothing to do.
       }
 
-      public void request(final long n) {
-        if (initialRequested == 0) {
-          initialRequested = n;
+      public void request(final long number) {
+        if (number <= 0) {
+          throw new IllegalArgumentException("A request must be strictly positive.");
         }
 
-        wrapped.request(n);
+        dispatch(
+            () -> {
+              requested += number;
+              more();
+            });
       }
     }
   }
