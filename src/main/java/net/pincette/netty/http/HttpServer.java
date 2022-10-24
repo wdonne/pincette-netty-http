@@ -12,6 +12,8 @@ import static io.netty.handler.codec.http.HttpUtil.setKeepAlive;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static io.netty.handler.codec.http.LastHttpContent.EMPTY_LAST_CONTENT;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Optional.ofNullable;
+import static net.pincette.rs.Serializer.dispatch;
 import static net.pincette.util.Util.getStackTrace;
 import static net.pincette.util.Util.tryToDoRethrow;
 
@@ -214,29 +216,22 @@ public class HttpServer implements Closeable {
       requestHandler
           .apply(request, channelConsumer::subscribe, response)
           .thenAccept(
-              body -> {
-                if (body != null) {
-                  body.subscribe(new ResponseStreamer(response, context, keepAlive));
-                } else {
-                  context.writeAndFlush(response);
-                }
-              });
+              body ->
+                  ofNullable(body)
+                      .orElseGet(net.pincette.rs.Util::empty)
+                      .subscribe(new ResponseStreamer(response, context)));
     }
   }
 
   private static class ResponseStreamer implements Subscriber<ByteBuf> {
     private final ChannelHandlerContext context;
-    private final boolean keepAlive;
     private final HttpResponse response;
-    private boolean error;
     private boolean responseFlushed;
     private Subscription subscription;
 
-    private ResponseStreamer(
-        final HttpResponse response, final ChannelHandlerContext context, final boolean keepAlive) {
+    private ResponseStreamer(final HttpResponse response, final ChannelHandlerContext context) {
       this.response = response;
       this.context = context;
-      this.keepAlive = keepAlive;
     }
 
     private void flushResponse() {
@@ -247,31 +242,34 @@ public class HttpServer implements Closeable {
     }
 
     public void onComplete() {
-      if (!error) {
-        flushResponse();
-        context
-            .writeAndFlush(new DefaultLastHttpContent())
-            .addListener(
-                keepAlive ? (f -> context.channel().flush()) : (f -> context.channel().close()));
-      }
+      dispatch(
+          () -> {
+            flushResponse();
+            context
+                .writeAndFlush(new DefaultLastHttpContent())
+                .addListener(f -> context.channel().close());
+          });
     }
 
     public void onError(final Throwable t) {
-      response.setStatus(INTERNAL_SERVER_ERROR);
-      response.headers().set(CONTENT_TYPE, "text/plain");
-      flushResponse();
-      context.writeAndFlush(
-          new DefaultHttpContent(wrappedBuffer(getStackTrace(t).getBytes(UTF_8))));
-      onComplete();
-      error = true;
+      dispatch(
+          () -> {
+            response.setStatus(INTERNAL_SERVER_ERROR);
+            response.headers().set(CONTENT_TYPE, "text/plain");
+            flushResponse();
+            context.writeAndFlush(
+                new DefaultHttpContent(wrappedBuffer(getStackTrace(t).getBytes(UTF_8))));
+            onComplete();
+          });
     }
 
     public void onNext(final ByteBuf buffer) {
-      if (!error) {
-        flushResponse();
-        context.writeAndFlush(new DefaultHttpContent(buffer));
-        subscription.request(1);
-      }
+      dispatch(
+          () -> {
+            flushResponse();
+            context.writeAndFlush(new DefaultHttpContent(buffer));
+            subscription.request(1);
+          });
     }
 
     public void onSubscribe(final Subscription subscription) {
