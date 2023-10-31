@@ -5,6 +5,7 @@ import static net.pincette.util.Pair.pair;
 
 import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.pincette.function.SideEffect;
@@ -20,7 +21,7 @@ class ByteBufInputStream extends InputStream {
   private final List<ByteBuf> buffers;
 
   ByteBufInputStream(final List<ByteBuf> buffers) {
-    this.buffers = buffers;
+    this.buffers = new ArrayList<>(buffers);
   }
 
   private void checkCurrentBuffer() {

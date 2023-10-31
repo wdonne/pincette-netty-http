@@ -180,16 +180,16 @@ public class HttpServer implements Closeable {
 
     @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
-      if (message instanceof HttpRequest) {
-        handleRequest(context, (HttpRequest) message);
-      } else if (message instanceof LastHttpContent) {
+      if (message instanceof HttpRequest httpRequest) {
+        handleRequest(context, httpRequest);
+      } else if (message instanceof LastHttpContent lastHttpContent) {
         if (message != EMPTY_LAST_CONTENT) {
-          channelConsumer.read(((LastHttpContent) message).content());
+          channelConsumer.read(lastHttpContent.content());
         }
 
         channelConsumer.complete();
-      } else if (message instanceof HttpContent) {
-        channelConsumer.read(((HttpContent) message).content());
+      } else if (message instanceof HttpContent httpContent) {
+        channelConsumer.read(httpContent.content());
       } else {
         tryToDoRethrow(() -> super.channelRead(context, message));
       }
@@ -264,12 +264,16 @@ public class HttpServer implements Closeable {
     }
 
     public void onNext(final ByteBuf buffer) {
-      dispatch(
-          () -> {
-            flushResponse();
-            context.writeAndFlush(new DefaultHttpContent(buffer));
-            subscription.request(1);
-          });
+      if (context.channel().isActive()) {
+        dispatch(
+            () -> {
+              flushResponse();
+              context.writeAndFlush(new DefaultHttpContent(buffer));
+              subscription.request(1);
+            });
+      } else {
+        subscription.cancel();
+      }
     }
 
     public void onSubscribe(final Subscription subscription) {

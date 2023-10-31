@@ -218,9 +218,7 @@ public class HttpClient {
   public CompletionStage<HttpResponse> request(
       final FullHttpRequest request, final Subscriber<? super ByteBuf> responseBody) {
     final Redirectable redirectable =
-        responseBody instanceof Redirectable
-            ? (Redirectable) responseBody
-            : newRedirectable(responseBody);
+        responseBody instanceof Redirectable red ? red : newRedirectable(responseBody);
     final URI uri = getUri(request);
 
     request.headers().add(ACCEPT_ENCODING, "gzip deflate").set(HOST, fullHost(uri));
@@ -307,22 +305,20 @@ public class HttpClient {
 
     @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
-      if (message instanceof HttpResponse) {
-        final HttpResponse response = (HttpResponse) message;
-
+      if (message instanceof HttpResponse response) {
         future.complete(response);
 
         if (!hasBody(response) && !isRedirect(response.status())) {
           responseBody.onComplete();
         }
-      } else if (message instanceof LastHttpContent) {
+      } else if (message instanceof LastHttpContent lastHttpContent) {
         if (message != EMPTY_LAST_CONTENT) {
-          channelConsumer.read(((LastHttpContent) message).content());
+          channelConsumer.read(lastHttpContent.content());
         }
 
         channelConsumer.complete();
-      } else if (message instanceof HttpContent) {
-        channelConsumer.read(((HttpContent) message).content());
+      } else if (message instanceof HttpContent httpContent) {
+        channelConsumer.read(httpContent.content());
       }
     }
 
