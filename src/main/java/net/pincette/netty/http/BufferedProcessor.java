@@ -1,25 +1,24 @@
 package net.pincette.netty.http;
 
 import static io.netty.buffer.Unpooled.buffer;
-import static java.lang.Math.max;
+import static java.lang.Math.min;
+import static java.util.Arrays.copyOfRange;
+import static net.pincette.util.Collections.list;
 
 import io.netty.buffer.ByteBuf;
-import java.util.concurrent.Flow.Processor;
-import java.util.concurrent.Flow.Subscriber;
-import java.util.concurrent.Flow.Subscription;
+import java.util.ArrayList;
+import java.util.List;
+import net.pincette.rs.Buffered;
 
 /**
  * Buffers bytes before writing them to the Netty buffer.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.2
  */
-public class BufferedProcessor implements Processor<byte[], ByteBuf> {
+public class BufferedProcessor extends Buffered<byte[], ByteBuf> {
   private final int capacity;
-  private ByteBuf buf;
-  private boolean error;
-  private Subscriber<? super ByteBuf> subscriber;
-  private Subscription subscription;
+  private ByteBuf buffer;
 
   /**
    * Create a byte buffer.
@@ -27,75 +26,52 @@ public class BufferedProcessor implements Processor<byte[], ByteBuf> {
    * @param capacity the maximum capacity of the buffer.
    */
   public BufferedProcessor(final int capacity) {
+    super(1);
     this.capacity = capacity;
-    newBuffer(capacity);
+    buffer = newBuffer();
   }
 
-  private void newBuffer(final int length) {
-    final int size = max(capacity, length);
+  private void consume(final byte[] value, final int offset, final List<ByteBuf> result) {
+    final int remaining = value.length - offset - buffer.writableBytes();
 
-    buf = buffer(size, size);
-  }
+    buffer.writeBytes(
+        copyOfRange(value, offset, offset + min(value.length - offset, buffer.writableBytes())));
 
-  private void notifySubscriber() {
-    subscriber.onSubscribe(new Backpressure());
-  }
+    if (buffer.writableBytes() == 0) {
+      result.add(buffer);
+      buffer = newBuffer();
 
-  public void onComplete() {
-    if (!error && buf.readableBytes() > 0) {
-      subscriber.onNext(buf);
-      subscriber.onComplete();
-    }
-  }
-
-  public void onError(final Throwable t) {
-    error = true;
-
-    if (subscriber != null) {
-      subscriber.onError(t);
-    }
-  }
-
-  public void onNext(final byte[] bytes) {
-    if (bytes.length > buf.maxWritableBytes()) {
-      final ByteBuf b = buf;
-
-      newBuffer(bytes.length);
-      buf.writeBytes(bytes);
-      subscriber.onNext(b);
-    } else {
-      buf.writeBytes(bytes);
-      subscription.request(1);
-    }
-  }
-
-  public void onSubscribe(final Subscription subscription) {
-    this.subscription = subscription;
-
-    if (subscriber != null) {
-      notifySubscriber();
-    }
-  }
-
-  public void subscribe(final Subscriber<? super ByteBuf> subscriber) {
-    this.subscriber = subscriber;
-
-    if (subscriber != null && subscription != null) {
-      notifySubscriber();
-    }
-  }
-
-  private class Backpressure implements Subscription {
-    public void cancel() {
-      if (subscription != null) {
-        subscription.cancel();
+      if (remaining > 0) {
+        consume(value, value.length - remaining, result);
       }
     }
+  }
 
-    public void request(final long number) {
-      if (!error && number > 0 && subscription != null) {
-        subscription.request(1);
-      }
+  @Override
+  protected void last() {
+    if (buffer.writerIndex() > 0) {
+      addValues(list(buffer));
+      emit();
     }
+  }
+
+  private ByteBuf newBuffer() {
+    return buffer(capacity, capacity);
+  }
+
+  @Override
+  protected boolean onNextAction(final byte[] value) {
+    final List<ByteBuf> result = new ArrayList<>();
+
+    consume(value, 0, result);
+
+    if (!result.isEmpty()) {
+      addValues(result);
+      emit();
+
+      return true;
+    }
+
+    return false;
   }
 }

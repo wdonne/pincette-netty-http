@@ -174,7 +174,10 @@ class TestHttp {
         response,
         OK,
         request.headers().get("Content-Type"),
-        with(readableByteChannel(newChannel(requestBody))).map(TestUtil::toNettyBuffer).get());
+        with(readableByteChannel(newChannel(requestBody)))
+            .map(TestUtil::toBytes)
+            .map(new BufferedProcessor(1024))
+            .get());
   }
 
   private static CompletionStage<Publisher<ByteBuf>> postHandlerStreaming(
@@ -342,7 +345,8 @@ class TestHttp {
   @DisplayName("get")
   void get() {
     for (int i = 0; i < 10; ++i) {
-      list("file.pdf", "text.txt", "empty").forEach(resource -> testGet(resource, OK));
+      list("file.pdf", "text.txt", "empty", "exact_buffer_size")
+          .forEach(resource -> testGet(resource, OK));
     }
   }
 
@@ -350,7 +354,8 @@ class TestHttp {
   @DisplayName("get authenticated")
   void getAuthenticated() {
     for (int i = 0; i < 10; ++i) {
-      list("file.pdf", "text.txt", "empty").forEach(resource -> testGetAuthenticated(resource, OK));
+      list("file.pdf", "text.txt", "empty", "exact_buffer_size")
+          .forEach(resource -> testGetAuthenticated(resource, OK));
     }
   }
 
@@ -358,7 +363,8 @@ class TestHttp {
   @DisplayName("get unauthenticated")
   void getUnauthenticated() {
     for (int i = 0; i < 10; ++i) {
-      list("file.pdf", "text.txt", "empty").forEach(TestHttp::testGetUnauthenticated);
+      list("file.pdf", "text.txt", "empty", "exact_buffer_size")
+          .forEach(TestHttp::testGetUnauthenticated);
     }
   }
 
@@ -366,7 +372,8 @@ class TestHttp {
   @DisplayName("head")
   void head() {
     for (int i = 0; i < 10; ++i) {
-      list("file.pdf", "text.txt", "empty").forEach(resource -> testHead(resource, OK));
+      list("file.pdf", "text.txt", "empty", "exact_buffer_size")
+          .forEach(resource -> testHead(resource, OK));
     }
   }
 
@@ -393,7 +400,7 @@ class TestHttp {
   @DisplayName("redirect")
   void redirect() {
     for (int i = 0; i < 10; ++i) {
-      list("file.pdf", "text.txt", "empty").forEach(TestHttp::testRedirect);
+      list("file.pdf", "text.txt", "empty", "exact_buffer_size").forEach(TestHttp::testRedirect);
     }
   }
 }
