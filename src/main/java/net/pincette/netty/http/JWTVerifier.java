@@ -2,6 +2,7 @@ package net.pincette.netty.http;
 
 import static io.netty.handler.codec.http.HttpHeaderNames.AUTHORIZATION;
 import static io.netty.handler.codec.http.HttpHeaderNames.COOKIE;
+import static io.netty.handler.codec.http.HttpResponseStatus.UNAUTHORIZED;
 import static java.net.URLDecoder.decode;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.stream;
@@ -10,9 +11,7 @@ import static net.pincette.util.Or.tryWith;
 import static net.pincette.util.Util.tryToGet;
 import static net.pincette.util.Util.tryToGetSilent;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
 import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
@@ -30,7 +29,7 @@ import net.pincette.jwt.Verifier;
  */
 public class JWTVerifier {
   private static final String ACCESS_TOKEN = "access_token";
-  static final String PAYLOAD_HEADER = "X-JWTPayload";
+  private static final String BEARER = "Bearer";
 
   private JWTVerifier() {}
 
@@ -42,11 +41,20 @@ public class JWTVerifier {
         .collect(toMap(s -> s[0], s -> s[1]));
   }
 
-  private static Optional<String> getBearerToken(final HttpRequest request) {
+  static Optional<String> getBearerToken(final HttpRequest request) {
     return tryWith(() -> getBearerTokenFromAuthorization(request))
         .or(() -> getCookies(request).get(ACCESS_TOKEN))
         .get()
         .flatMap(t -> tryToGet(() -> decode(t, UTF_8)));
+  }
+
+  private static Optional<String> getBearerTokenFromAuthorization(final HttpRequest request) {
+    return Optional.of(request.headers())
+        .map(h -> h.get(AUTHORIZATION))
+        .map(header -> header.split(" "))
+        .filter(s -> s.length == 2)
+        .filter(s -> s[0].equalsIgnoreCase(BEARER))
+        .map(s -> s[1]);
   }
 
   private static Map<String, String> getCookies(final HttpRequest request) {
@@ -56,18 +64,8 @@ public class JWTVerifier {
         .orElseGet(Collections::emptyMap);
   }
 
-  private static Optional<String> getBearerTokenFromAuthorization(final HttpRequest request) {
-    return Optional.of(request.headers())
-        .map(h -> h.get(AUTHORIZATION))
-        .map(header -> header.split(" "))
-        .filter(s -> s.length == 2)
-        .filter(s -> s[0].equalsIgnoreCase("Bearer"))
-        .map(s -> s[1]);
-  }
-
   private static Headers unauthorized(final Headers headers) {
-    return new Headers(
-        headers.request(), headers.response().setStatus(HttpResponseStatus.UNAUTHORIZED));
+    return new Headers(headers.request(), headers.response().setStatus(UNAUTHORIZED));
   }
 
   /**
@@ -81,15 +79,12 @@ public class JWTVerifier {
 
     return headers ->
         getBearerToken(headers.request())
-            .flatMap(token -> tryToGetSilent(() -> verifier.verify(token)))
-            .flatMap(decoded -> decoded.map(DecodedJWT::getPayload))
-            .map(payload -> withPayload(headers, payload))
+            .flatMap(token -> tryToGetSilent(() -> verifier.verify(token)).map(d -> token))
+            .map(
+                token -> {
+                  headers.request().headers().set(AUTHORIZATION, BEARER + " " + token);
+                  return headers;
+                })
             .orElseGet(() -> unauthorized(headers));
-  }
-
-  private static Headers withPayload(final Headers headers, final String payload) {
-    headers.request().headers().set(PAYLOAD_HEADER, payload);
-
-    return new Headers(headers.request(), headers.response());
   }
 }

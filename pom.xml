@@ -6,7 +6,7 @@
 
   <groupId>net.pincette</groupId>
   <artifactId>pincette-netty-http</artifactId>
-  <version>3.1.2</version>
+  <version>3.1.3</version>
   <packaging>jar</packaging>
   <name>pincette-netty-http</name>
   <description>A simple Netty HTTP server and client</description>
@@ -53,7 +53,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-bom</artifactId>
-        <version>4.1.101.Final</version>
+        <version>4.1.106.Final</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -74,7 +74,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-jwt</artifactId>
-      <version>1.0</version>
+      <version>1.0.2</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -92,7 +92,7 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>5.10.0</version>
+      <version>5.10.2</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -132,7 +132,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <version>3.6.0</version>
+        <version>3.6.3</version>
         <configuration>
           <additionalJOptions>
             <additionalJOption>-J-Dhttp.agent=maven-javadoc-plugin-${project.name}
@@ -141,16 +141,16 @@
           <links>
             <link>https://docs.oracle.com/en/java/javase/17/docs/api/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-common/2.3.5/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/3.4.1/</link>
-            <link>https://www.javadoc.io/doc/io.netty/netty-handler/4.1.101.Final/</link>
-            <link>https://www.javadoc.io/doc/io.netty/netty-codec-http/4.1.101.Final/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/3.4.2/</link>
+            <link>https://www.javadoc.io/doc/io.netty/netty-handler/4.1.106.Final/</link>
+            <link>https://www.javadoc.io/doc/io.netty/netty-codec-http/4.1.106.Final/</link>
           </links>
         </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.2.1</version>
+        <version>3.2.5</version>
         <configuration>
           <forkCount>0</forkCount>
         </configuration>
@@ -158,7 +158,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
-        <version>3.2.1</version>
+        <version>3.2.5</version>
       </plugin>
     </plugins>
   </build>

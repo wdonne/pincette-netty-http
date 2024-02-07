@@ -9,16 +9,16 @@ import static java.net.URLEncoder.encode;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.Duration.between;
 import static java.time.Instant.now;
-import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.joining;
-import static net.pincette.json.JsonUtil.getString;
-import static net.pincette.netty.http.JWTVerifier.PAYLOAD_HEADER;
+import static net.pincette.netty.http.JWTVerifier.getBearerToken;
 import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.DequePublisher.dequePublisher;
 import static net.pincette.rs.LambdaSubscriber.lambdaSubscriber;
 import static net.pincette.rs.Util.tap;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -35,7 +35,6 @@ import java.util.concurrent.Flow.Subscriber;
 import java.util.function.LongConsumer;
 import java.util.stream.Stream;
 import net.pincette.function.SideEffect;
-import net.pincette.json.JsonUtil;
 import net.pincette.rs.DequePublisher;
 import net.pincette.util.State;
 
@@ -81,9 +80,7 @@ public class Util {
   }
 
   private static Optional<String> getUsername(final HttpRequest request) {
-    return ofNullable(request.headers().get(PAYLOAD_HEADER))
-        .flatMap(JsonUtil::from)
-        .flatMap(jwt -> getString(jwt, "/sub"));
+    return getBearerToken(request).map(JWT::decode).map(DecodedJWT::getSubject);
   }
 
   public static FullHttpRequest setBody(

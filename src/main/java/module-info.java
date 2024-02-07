@@ -7,7 +7,7 @@ module net.pincette.netty.http {
   requires io.netty.transport;
   requires io.netty.handler;
   requires io.netty.common;
-  requires pincette.jwt;
+  requires net.pincette.jwt;
   requires com.auth0.jwt;
   requires net.pincette.json;
   requires java.json;
