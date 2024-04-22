@@ -1,21 +1,27 @@
 package net.pincette.netty.http;
 
 import static io.netty.buffer.Unpooled.wrappedBuffer;
+import static io.netty.handler.codec.http.HttpHeaderNames.AUTHORIZATION;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
+import static io.netty.handler.codec.http.HttpHeaderNames.COOKIE;
 import static io.netty.handler.codec.http.HttpHeaderNames.FROM;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.lang.String.valueOf;
+import static java.net.URLDecoder.decode;
 import static java.net.URLEncoder.encode;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.Duration.between;
 import static java.time.Instant.now;
+import static java.util.Arrays.stream;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.joining;
-import static net.pincette.netty.http.JWTVerifier.getBearerToken;
+import static java.util.stream.Collectors.toMap;
 import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.DequePublisher.dequePublisher;
 import static net.pincette.rs.LambdaSubscriber.lambdaSubscriber;
 import static net.pincette.rs.Util.tap;
+import static net.pincette.util.Or.tryWith;
+import static net.pincette.util.Util.tryToGet;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.interfaces.DecodedJWT;
@@ -27,6 +33,7 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
@@ -45,6 +52,9 @@ import net.pincette.util.State;
  * @since 3.0
  */
 public class Util {
+  private static final String ACCESS_TOKEN = "access_token";
+  static final String BEARER = "Bearer";
+
   private Util() {}
 
   public static InputStream asInputStream(final Stream<ByteBuf> buffers) {
@@ -58,6 +68,14 @@ public class Util {
         v -> total.set(total.get() + v.readableBytes()),
         () -> count.accept(total.get()),
         t -> count.accept(total.get()));
+  }
+
+  private static Map<String, String> cookies(final Stream<String> values) {
+    return values
+        .flatMap(value -> stream(value.split(";")))
+        .map(cookie -> cookie.trim().split("="))
+        .filter(split -> split.length == 2)
+        .collect(toMap(s -> s[0], s -> s[1]));
   }
 
   private static Metrics createMetrics(
@@ -77,6 +95,36 @@ public class Util {
         responseBytes,
         start,
         between(start, now()));
+  }
+
+  /**
+   * Gets the bearer token from the <code>Authorization</code> header. It falls back to the <code>
+   * access_token</code> cookie.
+   *
+   * @param request the request.
+   * @return The bearer token.
+   */
+  public static Optional<String> getBearerToken(final HttpRequest request) {
+    return tryWith(() -> getBearerTokenFromAuthorization(request))
+        .or(() -> getCookies(request).get(ACCESS_TOKEN))
+        .get()
+        .flatMap(t -> tryToGet(() -> decode(t, UTF_8)));
+  }
+
+  private static Optional<String> getBearerTokenFromAuthorization(final HttpRequest request) {
+    return Optional.of(request.headers())
+        .map(h -> h.get(AUTHORIZATION))
+        .map(header -> header.split(" "))
+        .filter(s -> s.length == 2)
+        .filter(s -> s[0].equalsIgnoreCase(BEARER))
+        .map(s -> s[1]);
+  }
+
+  private static Map<String, String> getCookies(final HttpRequest request) {
+    return Optional.of(request.headers())
+        .map(h -> h.getAll(COOKIE))
+        .map(values -> cookies(values.stream()))
+        .orElseGet(Collections::emptyMap);
   }
 
   private static Optional<String> getUsername(final HttpRequest request) {
