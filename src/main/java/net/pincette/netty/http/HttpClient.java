@@ -68,9 +68,11 @@ import net.pincette.function.SideEffect;
 /**
  * A simple HTTP client for Netty. It uses reactive streams with backpressure.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.1
+ * @deprecated Use <code>java.net.http>HttpClient</code> instead.
  */
+@Deprecated(since = "3.2.0", forRemoval = true)
 public class HttpClient {
   private static final String HOST = "Host";
   private static final String HTTPS = "https";

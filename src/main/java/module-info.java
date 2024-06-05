@@ -11,6 +11,8 @@ module net.pincette.netty.http {
   requires com.auth0.jwt;
   requires net.pincette.json;
   requires java.json;
+  requires java.logging;
+  requires java.net.http;
 
   exports net.pincette.netty.http;
 

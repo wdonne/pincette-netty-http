@@ -14,6 +14,7 @@ import static java.time.Duration.between;
 import static java.time.Instant.now;
 import static java.util.Arrays.stream;
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static java.util.logging.Level.FINEST;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static net.pincette.rs.Chain.with;
@@ -40,6 +41,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.function.LongConsumer;
+import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 import net.pincette.function.SideEffect;
 import net.pincette.rs.DequePublisher;
@@ -48,7 +51,7 @@ import net.pincette.util.State;
 /**
  * Some utilities.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 3.0
  */
 public class Util {
@@ -175,6 +178,12 @@ public class Util {
         .andThenGet(() -> completedFuture(responseBody));
   }
 
+  private static <T> T trace(final Logger logger, final T v, final Supplier<String> message) {
+    logger.log(FINEST, message);
+
+    return v;
+  }
+
   public static String urlEncodedFormData(final Map<String, String> formData) {
     return formData.entrySet().stream()
         .map(e -> e.getKey() + "=" + encode(e.getValue(), UTF_8))
@@ -212,5 +221,17 @@ public class Util {
                                                   start)))))
                       .get());
     };
+  }
+
+  public static RequestHandler wrapTracing(final RequestHandler handler, final Logger logger) {
+    return (request, requestBody, response) ->
+        handler
+            .apply(trace(logger, request, () -> "request: " + request), requestBody, response)
+            .thenApply(
+                resp -> {
+                  trace(logger, response, () -> "response: " + response);
+
+                  return resp;
+                });
   }
 }
