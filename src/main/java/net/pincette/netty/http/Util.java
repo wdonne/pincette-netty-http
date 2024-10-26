@@ -108,8 +108,22 @@ public class Util {
    * @return The bearer token.
    */
   public static Optional<String> getBearerToken(final HttpRequest request) {
+    return getBearerToken(request, ACCESS_TOKEN);
+  }
+
+  /**
+   * Gets the bearer token from the <code>Authorization</code> header. It falls back to the <code>
+   * access_token</code> cookie.
+   *
+   * @param request the request.
+   * @param fallbackCookie the name of the cookie that is consumed when no bearer token could be
+   *     found. Make sure such a cookie is a <code>HttpOnly</code> cookie.
+   * @return The bearer token.
+   */
+  public static Optional<String> getBearerToken(
+      final HttpRequest request, final String fallbackCookie) {
     return tryWith(() -> getBearerTokenFromAuthorization(request))
-        .or(() -> getCookies(request).get(ACCESS_TOKEN))
+        .or(() -> getCookies(request).get(fallbackCookie))
         .get()
         .flatMap(t -> tryToGet(() -> decode(t, UTF_8)));
   }

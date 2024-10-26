@@ -13,6 +13,8 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static io.netty.handler.codec.http.LastHttpContent.EMPTY_LAST_CONTENT;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.ofNullable;
+import static java.util.logging.Level.SEVERE;
+import static java.util.logging.Logger.getLogger;
 import static net.pincette.rs.Serializer.dispatch;
 import static net.pincette.util.Util.getStackTrace;
 import static net.pincette.util.Util.tryToDoRethrow;
@@ -45,14 +47,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
+import java.util.logging.Logger;
 
 /**
  * A simple HTTP server on top of Netty.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 public class HttpServer implements Closeable {
+  private static final Logger LOGGER = getLogger("net.pincette.netty.http");
+
   private final EventLoopGroup masterGroup = new NioEventLoopGroup();
   private final EventLoopGroup slaveGroup = new NioEventLoopGroup();
   private final ChannelFuture channel;
@@ -167,6 +172,7 @@ public class HttpServer implements Closeable {
 
     private static void internalServerError(
         final ChannelHandlerContext context, final Throwable cause) {
+      LOGGER.log(SEVERE, cause.getMessage(), cause);
       context.writeAndFlush(
           new DefaultFullHttpResponse(
               HTTP_1_1, INTERNAL_SERVER_ERROR, wrappedBuffer(getStackTrace(cause).getBytes())));
@@ -219,7 +225,13 @@ public class HttpServer implements Closeable {
               body ->
                   ofNullable(body)
                       .orElseGet(net.pincette.rs.Util::empty)
-                      .subscribe(new ResponseStreamer(response, context)));
+                      .subscribe(new ResponseStreamer(response, context)))
+          .exceptionally(
+              t -> {
+                internalServerError(context, t);
+                context.channel().close();
+                return null;
+              });
     }
   }
 

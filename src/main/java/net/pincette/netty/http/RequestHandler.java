@@ -9,7 +9,7 @@ import java.util.concurrent.Flow.Publisher;
 /**
  * The interface for handling requests.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 @FunctionalInterface

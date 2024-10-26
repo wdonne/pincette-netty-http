@@ -14,7 +14,7 @@ import net.pincette.function.SideEffect;
  * Creates an input stream from a list of buffers. It may happen that buffers are repeated. However,
  * their readability status will make sure content is not read more than once.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 class ByteBufInputStream extends InputStream {

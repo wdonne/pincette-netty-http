@@ -14,7 +14,7 @@ import net.pincette.rs.Accumulator;
 /**
  * A subscriber that accumulates the complete response body.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 3.0
  */
 public class ResponseAccumulator extends Accumulator<ByteBuf, InputStream> {
