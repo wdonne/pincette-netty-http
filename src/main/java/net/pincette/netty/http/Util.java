@@ -55,7 +55,7 @@ import net.pincette.util.State;
  * @since 3.0
  */
 public class Util {
-  private static final String ACCESS_TOKEN = "access_token";
+  static final String ACCESS_TOKEN = "access_token";
   static final String BEARER = "Bearer";
 
   private Util() {}
