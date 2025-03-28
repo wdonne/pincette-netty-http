@@ -21,6 +21,7 @@ import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.DequePublisher.dequePublisher;
 import static net.pincette.rs.LambdaSubscriber.lambdaSubscriber;
 import static net.pincette.rs.Util.tap;
+import static net.pincette.util.Collections.list;
 import static net.pincette.util.Or.tryWith;
 import static net.pincette.util.Util.tryToGet;
 
@@ -34,7 +35,9 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
@@ -71,6 +74,11 @@ public class Util {
         v -> total.set(total.get() + v.readableBytes()),
         () -> count.accept(total.get()),
         t -> count.accept(total.get()));
+  }
+
+  private static void collectMetrics(
+      final Metrics metrics, final List<DequePublisher<Metrics>> collectors) {
+    collectors.forEach(c -> c.getDeque().addFirst(metrics));
   }
 
   private static Map<String, String> cookies(final Stream<String> values) {
@@ -206,9 +214,20 @@ public class Util {
 
   public static RequestHandler wrapMetrics(
       final RequestHandler handler, final Subscriber<Metrics> collector) {
-    final DequePublisher<Metrics> publisher = dequePublisher();
+    return wrapMetrics(handler, list(collector));
+  }
 
-    publisher.subscribe(collector);
+  public static RequestHandler wrapMetrics(
+      final RequestHandler handler, final List<Subscriber<Metrics>> collectors) {
+    final List<DequePublisher<Metrics>> publishers = new ArrayList<>(collectors.size());
+
+    collectors.forEach(
+        c -> {
+          final DequePublisher<Metrics> publisher = dequePublisher();
+
+          publishers.add(publisher);
+          publisher.subscribe(c);
+        });
 
     return (request, requestBody, response) -> {
       final State<Long> requestBytes = new State<>(0L);
@@ -224,15 +243,10 @@ public class Util {
                           tap(
                               bodyCounter(
                                   bytes ->
-                                      publisher
-                                          .getDeque()
-                                          .addFirst(
-                                              createMetrics(
-                                                  request,
-                                                  response,
-                                                  requestBytes.get(),
-                                                  bytes,
-                                                  start)))))
+                                      collectMetrics(
+                                          createMetrics(
+                                              request, response, requestBytes.get(), bytes, start),
+                                          publishers))))
                       .get());
     };
   }
