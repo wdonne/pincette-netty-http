@@ -6,7 +6,7 @@
 
   <groupId>net.pincette</groupId>
   <artifactId>pincette-netty-http</artifactId>
-  <version>3.2.7</version>
+  <version>3.2.8</version>
   <packaging>jar</packaging>
   <name>pincette-netty-http</name>
   <description>A simple Netty HTTP server and client</description>
@@ -69,7 +69,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>3.8.1</version>
+      <version>3.9.0</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
