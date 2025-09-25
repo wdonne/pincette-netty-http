@@ -186,18 +186,17 @@ public class HttpServer implements Closeable {
 
     @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
-      if (message instanceof HttpRequest httpRequest) {
-        handleRequest(context, httpRequest);
-      } else if (message instanceof LastHttpContent lastHttpContent) {
-        if (message != EMPTY_LAST_CONTENT) {
-          channelConsumer.read(lastHttpContent.content());
-        }
+      switch (message) {
+        case HttpRequest httpRequest -> handleRequest(context, httpRequest);
+        case LastHttpContent lastHttpContent -> {
+          if (message != EMPTY_LAST_CONTENT) {
+            channelConsumer.read(lastHttpContent.content());
+          }
 
-        channelConsumer.complete();
-      } else if (message instanceof HttpContent httpContent) {
-        channelConsumer.read(httpContent.content());
-      } else {
-        tryToDoRethrow(() -> super.channelRead(context, message));
+          channelConsumer.complete();
+        }
+        case HttpContent httpContent -> channelConsumer.read(httpContent.content());
+        default -> tryToDoRethrow(() -> super.channelRead(context, message));
       }
     }
 

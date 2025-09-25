@@ -18,8 +18,8 @@ import static java.util.logging.Level.FINEST;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static net.pincette.rs.Chain.with;
-import static net.pincette.rs.DequePublisher.dequePublisher;
 import static net.pincette.rs.LambdaSubscriber.lambdaSubscriber;
+import static net.pincette.rs.QueuePublisher.queuePublisher;
 import static net.pincette.rs.Util.tap;
 import static net.pincette.util.Collections.list;
 import static net.pincette.util.Or.tryWith;
@@ -48,7 +48,7 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 import net.pincette.function.SideEffect;
-import net.pincette.rs.DequePublisher;
+import net.pincette.rs.QueuePublisher;
 import net.pincette.util.State;
 
 /**
@@ -77,8 +77,8 @@ public class Util {
   }
 
   private static void collectMetrics(
-      final Metrics metrics, final List<DequePublisher<Metrics>> collectors) {
-    collectors.forEach(c -> c.getDeque().addFirst(metrics));
+      final Metrics metrics, final List<QueuePublisher<Metrics>> collectors) {
+    collectors.forEach(c -> c.getQueue().add(metrics));
   }
 
   private static Map<String, String> cookies(final Stream<String> values) {
@@ -219,11 +219,11 @@ public class Util {
 
   public static RequestHandler wrapMetrics(
       final RequestHandler handler, final List<Subscriber<Metrics>> collectors) {
-    final List<DequePublisher<Metrics>> publishers = new ArrayList<>(collectors.size());
+    final List<QueuePublisher<Metrics>> publishers = new ArrayList<>(collectors.size());
 
     collectors.forEach(
         c -> {
-          final DequePublisher<Metrics> publisher = dequePublisher();
+          final QueuePublisher<Metrics> publisher = queuePublisher();
 
           publishers.add(publisher);
           publisher.subscribe(c);

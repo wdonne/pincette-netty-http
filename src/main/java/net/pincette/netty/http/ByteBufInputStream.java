@@ -25,8 +25,8 @@ class ByteBufInputStream extends InputStream {
   }
 
   private void checkCurrentBuffer() {
-    if (!buffers.isEmpty() && !buffers.get(0).isReadable()) {
-      buffers.remove(0).release();
+    if (!buffers.isEmpty() && !buffers.getFirst().isReadable()) {
+      buffers.removeFirst().release();
     }
   }
 
@@ -45,7 +45,7 @@ class ByteBufInputStream extends InputStream {
   private Optional<Integer> readBuffer(final byte[] b, final int off, final int len) {
     return Optional.of(buffers)
         .filter(buf -> !buf.isEmpty())
-        .map(buf -> buf.get(0))
+        .map(List::getFirst)
         .map(buf -> pair(buf, min(len, buf.readableBytes())))
         .map(
             pair ->
