@@ -26,7 +26,7 @@ public class PipelineHandler {
     final HeaderHandler next =
         headers -> ok(headers.response()) ? handler2.apply(headers) : headers;
 
-    return (HeaderHandler) handler1.andThen(next);
+    return headers -> next.apply(handler1.apply(headers));
   }
 
   /**
