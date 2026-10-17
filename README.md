@@ -6,3 +6,5 @@ With this library you can run an HTTP server on top of
 There is also a simple HTTP client API using Netty. It has a reactive streams interface with backpressure for the response body.
 
 Read more in the [API documentation](https://www.javadoc.io/doc/net.pincette/pincette-netty-http).
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/wdonne/pincette-netty-http)
