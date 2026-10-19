@@ -6,7 +6,7 @@
 
   <groupId>net.pincette</groupId>
   <artifactId>pincette-netty-http</artifactId>
-  <version>3.2.26</version>
+  <version>3.2.27</version>
   <packaging>jar</packaging>
   <name>pincette-netty-http</name>
   <description>A simple Netty HTTP server and client</description>
@@ -53,7 +53,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-bom</artifactId>
-        <version>4.1.138.Final</version>
+        <version>4.1.139.Final</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -74,7 +74,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-jwt</artifactId>
-      <version>1.1.9</version>
+      <version>1.1.10</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -102,7 +102,7 @@
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
-        <version>0.11.0</version>
+        <version>0.12.0</version>
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>central</publishingServerId>
